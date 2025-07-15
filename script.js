@@ -1,58 +1,162 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Get modal elements
+    // --- DOM Elements ---
     const modal = document.getElementById('imageModal');
     const modalImage = document.getElementById('modalImage');
     const closeBtn = document.querySelector('.close-btn');
+    const prevBtn = document.querySelector('.prev-btn');
+    const nextBtn = document.querySelector('.next-btn');
+    const themeToggle = document.getElementById('theme-toggle');
 
-    // Function to populate an image grid
-    function populateGrid(containerSelector, folderName, numberOfImages) {
+    // --- State Variables ---
+    const galleryData = {}; // Object to hold image sources for each gallery
+    let currentImageList = [];
+    let currentIndex = 0;
+    let slideshowInterval = null;
+
+    // --- Theme Toggler ---
+    themeToggle.addEventListener('change', () => {
+        document.body.classList.toggle('light-theme');
+    });
+
+    // --- Core Functions ---
+
+    /**
+     * Populates an image grid and stores image data.
+     */
+    function populateGrid(containerSelector, folderName, start, end) {
         const gridContainer = document.querySelector(containerSelector);
-        if (!gridContainer) {
-            console.error(`Grid container not found: ${containerSelector}`);
-            return;
-        }
+        if (!gridContainer) return;
 
+        const imageList = [];
         gridContainer.innerHTML = ''; // Clear existing content
 
-        for (let i = 1; i <= numberOfImages; i++) {
-            const img = document.createElement('img');
-            // Format number with leading zero (e.g., 01, 02)
+        for (let i = start; i <= end; i++) {
             const imgFileName = `image_${i.toString().padStart(2, '0')}.jpg`;
-            img.src = `images/${folderName}/${imgFileName}`;
-            img.alt = `Momento do Shahid ${i}`; // Alt text for accessibility
+            const imgSrc = `images/${folderName}/${imgFileName}`;
+            imageList.push(imgSrc);
 
-            // Add click listener to open modal
+            const img = document.createElement('img');
+            img.src = imgSrc;
+            img.alt = `Momento do Shahid ${i}`;
+            img.dataset.index = i - start; // 0-based index
+            
             img.addEventListener('click', () => {
-                modal.style.display = 'flex'; // Use flex to center the content
-                modalImage.src = img.src;
+                openModal(imageList, parseInt(img.dataset.index));
             });
 
             gridContainer.appendChild(img);
         }
+        galleryData[containerSelector] = imageList; // Store for slideshow use
     }
 
-    // Populate the 'meses' grid with 33 images (from image_01.jpg to image_33.jpg)
-    populateGrid('.meses-grid', 'meses', 32);
+    /**
+     * Opens the modal with a specific image from a gallery.
+     * @param {string[]} imageList - The array of image sources.
+     * @param {number} index - The index of the image to display.
+     */
+    function openModal(imageList, index) {
+        stopSlideshow(); // Stop any running slideshow
+        currentImageList = imageList;
+        currentIndex = index;
+        updateModalImage();
+        modal.style.display = 'flex';
+    }
 
-    // Populate the 'aniversario' grid with 24 images (from image_01.jpg to image_24.jpg)
-    populateGrid('.aniversario-grid', 'ano', 24);
+    /**
+     * Updates the modal's image source based on the current index.
+     */
+    function updateModalImage() {
+        if (currentImageList.length > 0) {
+            modalImage.src = currentImageList[currentIndex];
+        }
+    }
 
-    // When the user clicks on the close button (x), close the modal
-    closeBtn.addEventListener('click', () => {
+    function showNextImage() {
+        stopSlideshow();
+        currentIndex = (currentIndex + 1) % currentImageList.length;
+        updateModalImage();
+    }
+
+    function showPrevImage() {
+        stopSlideshow();
+        currentIndex = (currentIndex - 1 + currentImageList.length) % currentImageList.length;
+        updateModalImage();
+    }
+
+    function startSlideshow(gallerySelector) {
+        const imageList = galleryData[gallerySelector];
+        if (!imageList || imageList.length === 0) return;
+        
+        openModal(imageList, 0); // Open modal at the first image
+        
+        slideshowInterval = setInterval(() => {
+            // This is the slideshow loop, we don't call showNextImage() to avoid clearing the interval
+            currentIndex = (currentIndex + 1) % currentImageList.length;
+            updateModalImage();
+        }, 3000); // Change image every 3 seconds
+    }
+
+    function stopSlideshow() {
+        if (slideshowInterval) {
+            clearInterval(slideshowInterval);
+            slideshowInterval = null;
+        }
+    }
+
+    function closeModal() {
+        stopSlideshow();
         modal.style.display = 'none';
+    }
+
+    // --- Initial Population ---
+    populateGrid('.pre-natal-grid', 'pre', 1, 11);
+    populateGrid('.celebracao-meses-grid', 'celebrate_month', 1, 8);
+    populateGrid('.aniversario-grid', 'ano', 1, 23);
+    populateGrid('.momentos-especiais-grid', 'diversos', 1, 14);
+
+    // --- Event Listeners ---
+
+    // Slideshow Buttons
+    document.querySelectorAll('.slide-show-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const gallerySelector = button.dataset.gallery;
+            startSlideshow(gallerySelector);
+        });
     });
 
-    // When the user clicks anywhere outside of the modal content, close it
+    // Modal Navigation
+    prevBtn.addEventListener('click', showPrevImage);
+    nextBtn.addEventListener('click', showNextImage);
+
+    // Closing Modal
+    closeBtn.addEventListener('click', closeModal);
     modal.addEventListener('click', (event) => {
-        if (event.target === modal) { // Check if the click was directly on the modal overlay
-            modal.style.display = 'none';
+        if (event.target === modal) {
+            closeModal();
         }
     });
 
-    // Close modal with Escape key
+    // Keyboard Navigation
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && modal.style.display === 'flex') {
-            modal.style.display = 'none';
+        if (modal.style.display === 'flex') {
+            if (event.key === 'Escape') closeModal();
+            if (event.key === 'ArrowRight') showNextImage();
+            if (event.key === 'ArrowLeft') showPrevImage();
+        }
+    });
+
+    // Swipe Navigation for Mobile
+    let touchStartX = 0;
+    modal.addEventListener('touchstart', (event) => {
+        touchStartX = event.changedTouches[0].screenX;
+    }, { passive: true });
+
+    modal.addEventListener('touchend', (event) => {
+        const touchEndX = event.changedTouches[0].screenX;
+        if (touchEndX < touchStartX - 50) { // Swiped left
+            showNextImage();
+        } else if (touchEndX > touchStartX + 50) { // Swiped right
+            showPrevImage();
         }
     });
 });
